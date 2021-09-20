@@ -9,7 +9,6 @@ import datetime
 from functools import wraps
 
 auth = Blueprint('auth', __name__)
-# change this
 def authentication_required(f):
     @wraps(f)
     def decorator(*args, **kwargs):
@@ -17,13 +16,15 @@ def authentication_required(f):
         if 'x-access-tokens' in request.headers:
             token = request.headers['x-access-tokens']
         if not token:
-            return make_response("Token is invalid", 401, 'Valid token is missing')
+            return make_response(jsonify({"message": "Token is invalid"}), 401)
+        current_user = None
+        header_data = jwt.get_unverified_header(token)
         try:
-            data = jwt.decode(token, "hhh", algorithms="HS256")
+            data = jwt.decode(token, "hhh", algorithms=[header_data['alg']])
             current_user = User.query.filter_by(id=data['id']).first()
-            return f(current_user, *args, **kwargs)
-        except:
-            return make_response("Token is invalid", 401, 'Valid token is missing')
+        except Exception as e:
+            return make_response(jsonify({"message": "Token is invalid"}), 401)
+        return f(current_user, *args, **kwargs)
     return decorator
 
 def authorization_required(f):
@@ -33,15 +34,15 @@ def authorization_required(f):
         if 'x-access-tokens' in request.headers:
             token = request.headers['x-access-tokens']
         if not token:
-            return make_response("Token is invalid", 401, 'Valid token is missing')
+            return make_response(jsonify({"message": "Token is missing"}), 401)
         try:
             data = jwt.decode(token, "hhh", algorithms="HS256")
             current_user = User.query.filter_by(id=data['id']).first()
             if current_user.admin == 0:
-                return make_response('Not authorized', 403, {"Authorization": "user is not admin"})
+                return make_response(jsonify({"message": "Not Authorized"}), 403)
             return f(current_user, *args, **kwargs)
         except:
-            return make_response("Token is invalid", 401, 'Valid token is missing')
+            return make_response(jsonify({"message": "Token is invalid"}), 401)
     return decorator
 
 @auth.route('/login', methods=['POST'])
@@ -49,8 +50,8 @@ def login():
     auth = request.authorization
     if not auth:
         return make_response('Invalid authetication', 401, {"Authentication": "Get my password"})
-    username = request.form.get('username')
-    password = request.form.get('password')
+    username = auth.get('username')
+    password = auth.get('password')
     user = User.query.filter_by(username=username).first()
     if user is not None and check_password_hash(user.password, auth.password):
         token = jwt.encode({'id': user.id}, "hhh")
@@ -61,13 +62,17 @@ def login():
 def signup():
     username = request.form.get('username')
     password = request.form.get('password')
-    isAdmin = request.form.get('isAdmin')
-    print(username, password, isAdmin)
+    admin = request.form.get('isAdmin')
     user = User.query.filter_by(username=username).first()
     if user is not None:
         return "User already exists"
     pw = generate_password_hash(password, method='sha256')
-    user = User(id=str(uuid.uuid4()), username=username, password=pw, admin=int(isAdmin))
+    isAdmin = 0
+    try:
+        isAdmin = int(admin)
+    except:
+        print("Invalid input for isAdmin")
+    user = User(id=str(uuid.uuid4()), username=username, password=pw, admin=isAdmin)
     db.session.add(user)
     db.session.commit()
     return jsonify({"status": "User created"})

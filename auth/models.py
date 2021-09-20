@@ -13,5 +13,5 @@ class User(db.Model):
 class Todos(db.Model):
     id = db.Column(db.String(100), primary_key=True)
     user_id = db.Column(db.String(100))
-    description = db.Column(db.String(100), unique=True, nullable=False)
+    description = db.Column(db.String(100), nullable=False)
 
